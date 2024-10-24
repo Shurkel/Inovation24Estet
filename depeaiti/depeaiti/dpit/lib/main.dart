@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:html' as html; // For web URL handling
+import 'dart:html' as html; // For web URL handling and recording
+import 'dart:typed_data'; // Import for Uint8List
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
@@ -41,11 +42,15 @@ class _MyHomePageState extends State<MyHomePage> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   double _playbackRate = 1.0;
   double _volume = 1.0;
+  bool _isRecording = false;
+  html.MediaRecorder? _mediaRecorder;
+  List<html.Blob> _audioChunks = [];
+  String? _recordedAudioUrl;
 
   // Equalizer settings
-  double _lowGain = 0.0; // Gain for low frequencies
-  double _midGain = 0.0; // Gain for mid frequencies
-  double _highGain = 0.0; // Gain for high frequencies
+  double _lowGain = 0.0;
+  double _midGain = 0.0;
+  double _highGain = 0.0;
 
   // Function to pick a .wav file
   Future<void> _pickFile() async {
@@ -73,7 +78,8 @@ class _MyHomePageState extends State<MyHomePage> {
         var responseData = await response.stream.bytesToString();
         var jsonResponse = jsonDecode(responseData);
         setState(() {
-          _result = "Result: ${jsonResponse['result']} (Confidence: ${jsonResponse['confidence']}%)";
+          _result =
+              "Result: ${jsonResponse['result']} (Confidence: ${jsonResponse['confidence']}%)";
         });
       } else {
         setState(() {
@@ -84,14 +90,67 @@ class _MyHomePageState extends State<MyHomePage> {
       // Generate a URL for the audio file and play it
       final blob = html.Blob([result.files.single.bytes!]);
       final url = html.Url.createObjectUrlFromBlob(blob);
-      await _audioPlayer.setSourceUrl(url);
+      await _audioPlayer.setSource(UrlSource(url)); // Use UrlSource instead
       await _audioPlayer.setVolume(_volume);
-      await _audioPlayer.setPlaybackRate(_playbackRate); // Set initial playback rate
-      _playAudio(); // Automatically play once loaded
+      await _audioPlayer.setPlaybackRate(_playbackRate);
+      _playAudio();
     }
   }
 
-  // Function to play the audio
+  // Function to start recording
+  Future<void> _startRecording() async {
+    var stream =
+        await html.window.navigator.mediaDevices?.getUserMedia({'audio': true});
+    if (stream != null) {
+      _mediaRecorder = html.MediaRecorder(stream);
+
+      // Listen for audio data
+      _mediaRecorder?.addEventListener('dataavailable', (event) {
+        // Cast the event to BlobEvent
+        final blobEvent = event as html.BlobEvent;
+
+        // Check if the data is not null before adding it to _audioChunks
+        if (blobEvent.data != null) {
+          _audioChunks.add(blobEvent
+              .data!); // Use the null assertion operator (!) to treat it as non-null
+        }
+      });
+
+      // When recording stops, create a URL for the recorded audio
+      _mediaRecorder?.addEventListener('stop', (event) {
+        final blob = html.Blob(_audioChunks);
+        _recordedAudioUrl = html.Url.createObjectUrlFromBlob(blob);
+        _playRecordedAudio();
+        setState(() {
+          _isRecording = false;
+        });
+      });
+
+      // Start recording
+      _mediaRecorder?.start();
+      setState(() {
+        _isRecording = true;
+      });
+    }
+  }
+
+  // Function to stop recording
+  Future<void> _stopRecording() async {
+    _mediaRecorder?.stop();
+    setState(() {
+      _isRecording = false;
+    });
+  }
+
+  // Function to play the recorded audio
+  Future<void> _playRecordedAudio() async {
+    if (_recordedAudioUrl != null) {
+      await _audioPlayer.setSource(UrlSource(_recordedAudioUrl!));
+      await _audioPlayer.play(UrlSource(_recordedAudioUrl!));
+    }
+  }
+
+  // Function to play the selected audio
   Future<void> _playAudio() async {
     await _audioPlayer.resume();
   }
@@ -122,12 +181,47 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  // Function to adjust gains for equalizer (decoupled from volume control)
+  // Function to upload recorded audio to Flask server
+  Future<void> _uploadRecordedAudio() async {
+    if (_recordedAudioUrl != null) {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('http://127.0.0.1:5000/predict'),
+      );
+
+      final blob = html.Blob(_audioChunks);
+      final reader = html.FileReader();
+
+      reader.readAsArrayBuffer(blob);
+      reader.onLoadEnd.listen((_) async {
+        final bytes = reader.result as Uint8List;
+
+        request.files.add(http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: '10_tudorica.wav', // Name the file as .wav
+        ));
+
+        final response = await request.send();
+        if (response.statusCode == 200) {
+          final responseData = await response.stream.bytesToString();
+          final jsonResponse = jsonDecode(responseData);
+          setState(() {
+            _result =
+                "Result: ${jsonResponse['result']} (Confidence: ${jsonResponse['confidence']}%)";
+          });
+        } else {
+          setState(() {
+            _result = "Error uploading recorded audio.";
+          });
+        }
+      });
+    }
+  }
+
+  // Equalizer logic (for potential future use)
   void _adjustEqualizer() {
-    // Equalizer logic would go here, but we do not modify the volume directly.
-    // Currently, this function does not interact with the volume or playback directly.
-    // You might want to apply your DSP logic here to process audio frequencies.
-    // For example, you could apply the gain values to a sound processor.
+    // Placeholder for equalizer logic
   }
 
   @override
@@ -171,81 +265,102 @@ class _MyHomePageState extends State<MyHomePage> {
                 onPressed: _stopAudio,
                 child: const Text('Stop Audio'),
               ),
-              const SizedBox(height: 20),
-              const Text('Playback Speed'),
-              Slider(
-                value: _playbackRate,
-                min: 0.5,
-                max: 2.0,
-                divisions: 3,
-                label: '$_playbackRate',
-                onChanged: (value) {
-                  _setPlaybackSpeed(value);
-                },
+            ],
+            const SizedBox(height: 20),
+            if (_isRecording) ...[
+              const Text('Recording...'),
+              ElevatedButton(
+                onPressed: _stopRecording,
+                child: const Text('Stop Recording'),
               ),
-              const Text('Volume'),
-              Slider(
-                value: _volume,
-                min: 0,
-                max: 1.0,
-                divisions: 10,
-                label: '$_volume',
-                onChanged: (value) {
-                  _setVolume(value);
-                },
-              ),
-              const SizedBox(height: 20),
-              const Text('Equalizer'),
-              const Text('Low Frequencies'),
-              Slider(
-                value: _lowGain,
-                min: -1.0,
-                max: 1.0,
-                divisions: 20,
-                label: '$_lowGain',
-                onChanged: (value) {
-                  setState(() {
-                    _lowGain = value;
-                  });
-                  _adjustEqualizer();
-                },
-              ),
-              const Text('Mid Frequencies'),
-              Slider(
-                value: _midGain,
-                min: -1.0,
-                max: 1.0,
-                divisions: 20,
-                label: '$_midGain',
-                onChanged: (value) {
-                  setState(() {
-                    _midGain = value;
-                  });
-                  _adjustEqualizer();
-                },
-              ),
-              const Text('High Frequencies'),
-              Slider(
-                value: _highGain,
-                min: -1.0,
-                max: 1.0,
-                divisions: 20,
-                label: '$_highGain',
-                onChanged: (value) {
-                  setState(() {
-                    _highGain = value;
-                  });
-                  _adjustEqualizer();
-                },
+            ] else ...[
+              ElevatedButton(
+                onPressed: _startRecording,
+                child: const Text('Start Recording'),
               ),
             ],
+            if (_recordedAudioUrl != null)
+              Column(
+                children: [
+                  ElevatedButton(
+                    onPressed: _playRecordedAudio,
+                    child: const Text('Play Recorded Audio'),
+                  ),
+                  ElevatedButton(
+                    onPressed: _uploadRecordedAudio,
+                    child: const Text('Upload Recorded Audio'),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 20),
+            const Text('Playback Speed'),
+            Slider(
+              value: _playbackRate,
+              min: 0.5,
+              max: 2.0,
+              divisions: 3,
+              label: '$_playbackRate',
+              onChanged: (value) {
+                _setPlaybackSpeed(value);
+              },
+            ),
+            const Text('Volume'),
+            Slider(
+              value: _volume,
+              min: 0,
+              max: 1.0,
+              divisions: 10,
+              label: '$_volume',
+              onChanged: (value) {
+                _setVolume(value);
+              },
+            ),
+            const SizedBox(height: 20),
+            const Text('Equalizer'),
+            const Text('Low Frequencies'),
+            Slider(
+              value: _lowGain,
+              min: -1.0,
+              max: 1.0,
+              divisions: 20,
+              label: '$_lowGain',
+              onChanged: (value) {
+                setState(() {
+                  _lowGain = value;
+                });
+                _adjustEqualizer();
+              },
+            ),
+            const Text('Mid Frequencies'),
+            Slider(
+              value: _midGain,
+              min: -1.0,
+              max: 1.0,
+              divisions: 20,
+              label: '$_midGain',
+              onChanged: (value) {
+                setState(() {
+                  _midGain = value;
+                });
+                _adjustEqualizer();
+              },
+            ),
+            const Text('High Frequencies'),
+            Slider(
+              value: _highGain,
+              min: -1.0,
+              max: 1.0,
+              divisions: 20,
+              label: '$_highGain',
+              onChanged: (value) {
+                setState(() {
+                  _highGain = value;
+                });
+                _adjustEqualizer();
+              },
+            ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _pickFile,
-        tooltip: 'Pick File',
-        child: const Icon(Icons.music_note),
       ),
     );
   }
