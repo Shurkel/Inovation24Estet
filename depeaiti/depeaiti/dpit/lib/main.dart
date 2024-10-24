@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_ffmpeg/flutter_ffmpeg.dart'; // Import the flutter_ffmpeg package
 import 'signup.dart'; // Import signup.dart for navigation
 
 void main() {
@@ -59,6 +60,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String? _filePath;
   String? _result;
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final FlutterFFmpeg _flutterFFmpeg = FlutterFFmpeg(); // Initialize FFmpeg
   double _playbackRate = 1.0;
   double _volume = 1.0;
   bool _isRecording = false;
@@ -106,12 +108,36 @@ class _MyHomePageState extends State<MyHomePage> {
         });
       }
 
-      // Generate a URL for the audio file and play it
+      // Play the selected audio
       final blob = html.Blob([result.files.single.bytes!]);
       final url = html.Url.createObjectUrlFromBlob(blob);
       await _audioPlayer.setSource(UrlSource(url)); // Use UrlSource instead
       await _audioPlayer.setVolume(_volume);
       await _audioPlayer.setPlaybackRate(_playbackRate);
+      _playAudio();
+    }
+  }
+
+  // Function to adjust the equalizer
+  Future<void> _adjustEqualizer() async {
+    if (_filePath != null) {
+      final String outputFilePath = "processed_audio.wav"; // Adjust path as necessary
+
+      String command = "-i $_filePath -af ";
+      
+      // Build the equalizer filter
+      command += "equalizer=f=50:t=low:g=$_lowGain,";  // Low frequencies
+      command += "equalizer=f=1000:t=mid:g=$_midGain,"; // Mid frequencies
+      command += "equalizer=f=10000:t=high:g=$_highGain"; // High frequencies
+
+      // Output the processed file
+      command += " $outputFilePath";
+
+      // Execute the command
+      await _flutterFFmpeg.execute(command);
+
+      // Play the processed audio
+      await _audioPlayer.setSource(UrlSource(outputFilePath));
       _playAudio();
     }
   }
@@ -125,13 +151,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
       // Listen for audio data
       _mediaRecorder?.addEventListener('dataavailable', (event) {
-        // Cast the event to BlobEvent
         final blobEvent = event as html.BlobEvent;
 
-        // Check if the data is not null before adding it to _audioChunks
         if (blobEvent.data != null) {
-          _audioChunks.add(blobEvent
-              .data!); // Use the null assertion operator (!) to treat it as non-null
+          _audioChunks.add(blobEvent.data!);
         }
       });
 
@@ -218,7 +241,7 @@ class _MyHomePageState extends State<MyHomePage> {
         request.files.add(http.MultipartFile.fromBytes(
           'file',
           bytes,
-          filename: '10_tudorica.wav', // Name the file as .wav
+          filename: 'recorded_audio.wav', // Name the file as .wav
         ));
 
         final response = await request.send();
@@ -236,11 +259,6 @@ class _MyHomePageState extends State<MyHomePage> {
         }
       });
     }
-  }
-
-  // Equalizer logic (for potential future use)
-  void _adjustEqualizer() {
-    // Placeholder for equalizer logic
   }
 
   @override
@@ -264,101 +282,145 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            const Text('Press the button to select a .wav file:', style: TextStyle(color: Colors.white)),
+            Text(
+              _result ?? 'Select a .wav file to analyze',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _pickFile,
-              child: const Text('Pick .wav File'),
+              child: const Text('Pick Audio File'),
             ),
-            if (_filePath != null) ...[
-              Text('Selected file: $_filePath', style: Theme.of(context).textTheme.bodyMedium),
-              if (_result != null) Text(_result!, style: Theme.of(context).textTheme.bodyMedium),
-             Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton(
-                      onPressed: _playAudio,
-                      child: const Text('Play Audio'),
-                    ),
-                    const SizedBox(width: 10), // Add space between buttons
-                    ElevatedButton(
-                      onPressed: _pauseAudio,
-                      child: const Text('Pause Audio'),
-                    ),
-                    const SizedBox(width: 10), // Add space between buttons
-                    ElevatedButton(
-                      onPressed: _stopAudio,
-                      child: const Text('Stop Audio'),
-                    ),
-                  ],
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: _isRecording ? null : _startRecording,
+                  child: const Text('Start Recording'),
                 ),
-              const SizedBox(height: 20),
-              const Text('Playback Speed', style: TextStyle(color: Colors.white)),
-              Slider(
-                value: _playbackRate,
-                min: 0.5,
-                max: 2.0,
-                divisions: 3,
-                label: '$_playbackRate',
-                onChanged: (value) {
-                  _setPlaybackSpeed(value);
-                },
-              ),
-              const Text('Volume', style: TextStyle(color: Colors.white)),
-              Slider(
-                value: _volume,
-                min: 0,
-                max: 1.0,
-                divisions: 10,
-                label: '$_volume',
-                onChanged: (value) {
-                  _setVolume(value);
-                },
-              ),
-              const SizedBox(height: 20),
-              const Text('Equalizer', style: TextStyle(color: Colors.white)),
-              const Text('Low Frequencies', style: TextStyle(color: Colors.white)),
-              Slider(
-                value: _lowGain,
-                min: -1.0,
-                max: 1.0,
-                divisions: 20,
-                label: '$_lowGain',
-                onChanged: (value) {
-                  setState(() {
-                    _lowGain = value;
-                  });
-                  _adjustEqualizer();
-                },
-              ),
-              const Text('Mid Frequencies', style: TextStyle(color: Colors.white)),
-              Slider(
-                value: _midGain,
-                min: -1.0,
-                max: 1.0,
-                divisions: 20,
-                label: '$_midGain',
-                onChanged: (value) {
-                  setState(() {
-                    _midGain = value;
-                  });
-                  _adjustEqualizer();
-                },
-              ),
-              const Text('High Frequencies', style: TextStyle(color: Colors.white)),
-              Slider(
-                value: _highGain,
-                min: -1.0,
-                max: 1.0,
-                divisions: 20,
-                label: '$_highGain',
-                onChanged: (value) {
-                  setState(() {
-                    _highGain = value;
-                  });
-                  _adjustEqualizer();
-                },
-              ),
-            ],
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: _isRecording ? _stopRecording : null,
+                  child: const Text('Stop Recording'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: _playAudio,
+                  child: const Text('Play'),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: _pauseAudio,
+                  child: const Text('Pause'),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: _stopAudio,
+                  child: const Text('Stop'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Playback Speed:'),
+                Slider(
+                  value: _playbackRate,
+                  min: 0.5,
+                  max: 2.0,
+                  divisions: 3,
+                  label: _playbackRate.toString(),
+                  onChanged: _setPlaybackSpeed,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Volume:'),
+                Slider(
+                  value: _volume,
+                  min: 0.0,
+                  max: 1.0,
+                  divisions: 10,
+                  label: _volume.toString(),
+                  onChanged: _setVolume,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Low Gain:'),
+                Slider(
+                  value: _lowGain,
+                  min: -12.0,
+                  max: 12.0,
+                  divisions: 24,
+                  label: _lowGain.toString(),
+                  onChanged: (value) {
+                    setState(() {
+                      _lowGain = value;
+                    });
+                    _adjustEqualizer(); // Adjust equalizer after value change
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Mid Gain:'),
+                Slider(
+                  value: _midGain,
+                  min: -12.0,
+                  max: 12.0,
+                  divisions: 24,
+                  label: _midGain.toString(),
+                  onChanged: (value) {
+                    setState(() {
+                      _midGain = value;
+                    });
+                    _adjustEqualizer(); // Adjust equalizer after value change
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('High Gain:'),
+                Slider(
+                  value: _highGain,
+                  min: -12.0,
+                  max: 12.0,
+                  divisions: 24,
+                  label: _highGain.toString(),
+                  onChanged: (value) {
+                    setState(() {
+                      _highGain = value;
+                    });
+                    _adjustEqualizer(); // Adjust equalizer after value change
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _uploadRecordedAudio,
+              child: const Text('Upload Recorded Audio'),
+            ),
           ],
         ),
       ),
