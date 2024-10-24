@@ -18,8 +18,27 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Flutter Audio Player',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+        brightness: Brightness.dark,
+        primaryColor: const Color(0xFF1E1E1E),
+        colorScheme: ColorScheme.dark(
+          primary: const Color(0xFFBB86FC),
+          secondary: const Color(0xFFBB86FC),
+          background: const Color(0xFF121212),
+        ),
+        textTheme: const TextTheme(
+          titleLarge: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+          bodyMedium: TextStyle(color: Colors.white70),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFBB86FC), // Button color
+            foregroundColor: Colors.white, // Text color
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20), // Rounded corners
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+          ),
+        ),
       ),
       home: const MyHomePage(title: 'EStetho'), // Start with MyHomePage
     );
@@ -151,28 +170,35 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            const Text('Press the button to select a .wav file:'),
+            const Text('Press the button to select a .wav file:', style: TextStyle(color: Colors.white)),
             ElevatedButton(
               onPressed: _pickFile,
               child: const Text('Pick .wav File'),
             ),
             if (_filePath != null) ...[
-              Text('Selected file: $_filePath'),
-              if (_result != null) Text(_result!),
-              ElevatedButton(
-                onPressed: _playAudio,
-                child: const Text('Play Audio'),
-              ),
-              ElevatedButton(
-                onPressed: _pauseAudio,
-                child: const Text('Pause Audio'),
-              ),
-              ElevatedButton(
-                onPressed: _stopAudio,
-                child: const Text('Stop Audio'),
-              ),
+              Text('Selected file: $_filePath', style: Theme.of(context).textTheme.bodyMedium),
+              if (_result != null) Text(_result!, style: Theme.of(context).textTheme.bodyMedium),
+             Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                      onPressed: _playAudio,
+                      child: const Text('Play Audio'),
+                    ),
+                    const SizedBox(width: 10), // Add space between buttons
+                    ElevatedButton(
+                      onPressed: _pauseAudio,
+                      child: const Text('Pause Audio'),
+                    ),
+                    const SizedBox(width: 10), // Add space between buttons
+                    ElevatedButton(
+                      onPressed: _stopAudio,
+                      child: const Text('Stop Audio'),
+                    ),
+                  ],
+                ),
               const SizedBox(height: 20),
-              const Text('Playback Speed'),
+              const Text('Playback Speed', style: TextStyle(color: Colors.white)),
               Slider(
                 value: _playbackRate,
                 min: 0.5,
@@ -183,7 +209,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   _setPlaybackSpeed(value);
                 },
               ),
-              const Text('Volume'),
+              const Text('Volume', style: TextStyle(color: Colors.white)),
               Slider(
                 value: _volume,
                 min: 0,
@@ -195,8 +221,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 },
               ),
               const SizedBox(height: 20),
-              const Text('Equalizer'),
-              const Text('Low Frequencies'),
+              const Text('Equalizer', style: TextStyle(color: Colors.white)),
+              const Text('Low Frequencies', style: TextStyle(color: Colors.white)),
               Slider(
                 value: _lowGain,
                 min: -1.0,
@@ -210,7 +236,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   _adjustEqualizer();
                 },
               ),
-              const Text('Mid Frequencies'),
+              const Text('Mid Frequencies', style: TextStyle(color: Colors.white)),
               Slider(
                 value: _midGain,
                 min: -1.0,
@@ -224,7 +250,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   _adjustEqualizer();
                 },
               ),
-              const Text('High Frequencies'),
+              const Text('High Frequencies', style: TextStyle(color: Colors.white)),
               Slider(
                 value: _highGain,
                 min: -1.0,
