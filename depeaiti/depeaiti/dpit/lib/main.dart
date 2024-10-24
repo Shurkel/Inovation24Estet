@@ -28,7 +28,8 @@ class MyApp extends StatelessWidget {
           background: const Color(0xFF121212),
         ),
         textTheme: const TextTheme(
-          titleLarge: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+          titleLarge: TextStyle(
+              color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
           bodyMedium: TextStyle(color: Colors.white70),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
@@ -121,12 +122,13 @@ class _MyHomePageState extends State<MyHomePage> {
   // Function to adjust the equalizer
   Future<void> _adjustEqualizer() async {
     if (_filePath != null) {
-      final String outputFilePath = "processed_audio.wav"; // Adjust path as necessary
+      final String outputFilePath =
+          "processed_audio.wav"; // Adjust path as necessary
 
       String command = "-i $_filePath -af ";
-      
+
       // Build the equalizer filter
-      command += "equalizer=f=50:t=low:g=$_lowGain,";  // Low frequencies
+      command += "equalizer=f=50:t=low:g=$_lowGain,"; // Low frequencies
       command += "equalizer=f=1000:t=mid:g=$_midGain,"; // Mid frequencies
       command += "equalizer=f=10000:t=high:g=$_highGain"; // High frequencies
 
@@ -258,6 +260,15 @@ class _MyHomePageState extends State<MyHomePage> {
           });
         }
       });
+    }
+  }
+
+  // Function to download the audio file
+  Future<void> _downloadAudio() async {
+    if (_recordedAudioUrl != null) {
+      final anchor = html.AnchorElement(href: _recordedAudioUrl)
+        ..setAttribute("download", "10_andrei.wav")
+        ..click();
     }
   }
 
@@ -418,8 +429,8 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _uploadRecordedAudio,
-              child: const Text('Upload Recorded Audio'),
+              onPressed: _downloadAudio,
+              child: const Text('Download Audio'),
             ),
           ],
         ),
