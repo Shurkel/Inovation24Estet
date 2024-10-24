@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:html' as html; // For web URL handling
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:audioplayers/audioplayers.dart';
 import 'signup.dart'; // Import signup.dart for navigation
 
 void main() {
@@ -19,7 +21,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: MyHomePage(title: 'EStetho'), // Start with MyHomePage
+      home: const MyHomePage(title: 'EStetho'), // Start with MyHomePage
     );
   }
 }
@@ -36,6 +38,14 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   String? _filePath;
   String? _result;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  double _playbackRate = 1.0;
+  double _volume = 1.0;
+
+  // Equalizer settings
+  double _lowGain = 0.0; // Gain for low frequencies
+  double _midGain = 0.0; // Gain for mid frequencies
+  double _highGain = 0.0; // Gain for high frequencies
 
   // Function to pick a .wav file
   Future<void> _pickFile() async {
@@ -63,15 +73,61 @@ class _MyHomePageState extends State<MyHomePage> {
         var responseData = await response.stream.bytesToString();
         var jsonResponse = jsonDecode(responseData);
         setState(() {
-          _result =
-              "Result: ${jsonResponse['result']} (Confidence: ${jsonResponse['confidence']}%)";
+          _result = "Result: ${jsonResponse['result']} (Confidence: ${jsonResponse['confidence']}%)";
         });
       } else {
         setState(() {
           _result = "Error uploading file.";
         });
       }
+
+      // Generate a URL for the audio file and play it
+      final blob = html.Blob([result.files.single.bytes!]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      await _audioPlayer.setSourceUrl(url);
+      await _audioPlayer.setVolume(_volume);
+      await _audioPlayer.setPlaybackRate(_playbackRate); // Set initial playback rate
+      _playAudio(); // Automatically play once loaded
     }
+  }
+
+  // Function to play the audio
+  Future<void> _playAudio() async {
+    await _audioPlayer.resume();
+  }
+
+  // Function to pause the audio
+  Future<void> _pauseAudio() async {
+    await _audioPlayer.pause();
+  }
+
+  // Function to stop the audio
+  Future<void> _stopAudio() async {
+    await _audioPlayer.stop();
+  }
+
+  // Function to set playback speed
+  Future<void> _setPlaybackSpeed(double speed) async {
+    await _audioPlayer.setPlaybackRate(speed);
+    setState(() {
+      _playbackRate = speed;
+    });
+  }
+
+  // Function to set volume
+  Future<void> _setVolume(double volume) async {
+    await _audioPlayer.setVolume(volume);
+    setState(() {
+      _volume = volume;
+    });
+  }
+
+  // Function to adjust gains for equalizer (decoupled from volume control)
+  void _adjustEqualizer() {
+    // Equalizer logic would go here, but we do not modify the volume directly.
+    // Currently, this function does not interact with the volume or playback directly.
+    // You might want to apply your DSP logic here to process audio frequencies.
+    // For example, you could apply the gain values to a sound processor.
   }
 
   @override
@@ -103,6 +159,85 @@ class _MyHomePageState extends State<MyHomePage> {
             if (_filePath != null) ...[
               Text('Selected file: $_filePath'),
               if (_result != null) Text(_result!),
+              ElevatedButton(
+                onPressed: _playAudio,
+                child: const Text('Play Audio'),
+              ),
+              ElevatedButton(
+                onPressed: _pauseAudio,
+                child: const Text('Pause Audio'),
+              ),
+              ElevatedButton(
+                onPressed: _stopAudio,
+                child: const Text('Stop Audio'),
+              ),
+              const SizedBox(height: 20),
+              const Text('Playback Speed'),
+              Slider(
+                value: _playbackRate,
+                min: 0.5,
+                max: 2.0,
+                divisions: 3,
+                label: '$_playbackRate',
+                onChanged: (value) {
+                  _setPlaybackSpeed(value);
+                },
+              ),
+              const Text('Volume'),
+              Slider(
+                value: _volume,
+                min: 0,
+                max: 1.0,
+                divisions: 10,
+                label: '$_volume',
+                onChanged: (value) {
+                  _setVolume(value);
+                },
+              ),
+              const SizedBox(height: 20),
+              const Text('Equalizer'),
+              const Text('Low Frequencies'),
+              Slider(
+                value: _lowGain,
+                min: -1.0,
+                max: 1.0,
+                divisions: 20,
+                label: '$_lowGain',
+                onChanged: (value) {
+                  setState(() {
+                    _lowGain = value;
+                  });
+                  _adjustEqualizer();
+                },
+              ),
+              const Text('Mid Frequencies'),
+              Slider(
+                value: _midGain,
+                min: -1.0,
+                max: 1.0,
+                divisions: 20,
+                label: '$_midGain',
+                onChanged: (value) {
+                  setState(() {
+                    _midGain = value;
+                  });
+                  _adjustEqualizer();
+                },
+              ),
+              const Text('High Frequencies'),
+              Slider(
+                value: _highGain,
+                min: -1.0,
+                max: 1.0,
+                divisions: 20,
+                label: '$_highGain',
+                onChanged: (value) {
+                  setState(() {
+                    _highGain = value;
+                  });
+                  _adjustEqualizer();
+                },
+              ),
             ],
           ],
         ),
